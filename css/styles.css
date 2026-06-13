@@ -151,6 +151,39 @@ html, body {
 .btn.small { font-size: 12px; padding: 6px 10px; }
 .btn.ghost { background: transparent; }
 
+/* ----- Кнопка «Сохранить» (публикация изменений) ----- */
+.save-btn { font-weight: 700; min-width: 124px; transition: background .15s, border-color .15s, box-shadow .2s, transform .08s; }
+/* есть несохранённые изменения — зовём нажать (янтарное свечение + пульс) */
+.save-btn.dirty {
+  background: linear-gradient(180deg, #ffd05a, #f5a623);
+  border-color: #ffe08a;
+  color: #3a2600;
+  box-shadow: 0 0 0 1px rgba(245,166,35,.55), 0 0 14px rgba(245,166,35,.55);
+  animation: savePulse 1.6s ease-in-out infinite;
+}
+.save-btn.dirty:hover { background: linear-gradient(180deg, #ffda73, #ffb02e); border-color: #ffe9b0; }
+@keyframes savePulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(245,166,35,.5),  0 0 10px rgba(245,166,35,.4); }
+  50%      { box-shadow: 0 0 0 1px rgba(245,166,35,.75), 0 0 20px rgba(245,166,35,.85); }
+}
+/* всё опубликовано */
+.save-btn.clean {
+  background: rgba(46,160,67,.16);
+  border-color: rgba(80,200,120,.5);
+  color: #8ff0b0;
+  cursor: default;
+  box-shadow: none;
+}
+.save-btn.clean:hover { background: rgba(46,160,67,.22); border-color: rgba(80,200,120,.6); }
+/* идёт сохранение */
+.save-btn.saving {
+  background: rgba(40,64,110,.55);
+  border-color: rgba(120,190,255,.4);
+  color: #cfe2ff;
+  cursor: progress;
+  box-shadow: none;
+}
+
 /* filter chips */
 .chip {
   font-family: var(--ui);

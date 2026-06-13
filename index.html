@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Nexus Tier List — Редактор</title>
-<link rel="stylesheet" href="css/styles.css?v=3" />
+<link rel="stylesheet" href="css/styles.css?v=4" />
 </head>
 <body>
   <!-- ============ Floating auth control (top-right corner) ============ -->
@@ -48,6 +48,11 @@
         <span class="track"><span class="thumb"></span></span>
         <span class="switch-label">Редактирование</span>
       </label>
+    </div>
+
+    <!-- Сохранить (опубликовать изменения для всех) — только для админа -->
+    <div class="tb-group" id="tbPublish" hidden>
+      <button class="btn save-btn clean" id="btnSave" title="Опубликовать изменения для всех">✓ Сохранено</button>
     </div>
 
     <!-- PNG доступен всем; остальное — только админу -->
@@ -208,6 +213,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
   <script src="js/firebase-config.js?v=5"></script>
   <script src="js/html2canvas.min.js"></script>
-  <script src="js/app.js?v=4"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

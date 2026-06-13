@@ -65,6 +65,8 @@
   let state = load() || defaultState();
   let isAdmin = false;
   let fbRef = null;
+  let dirty = false;   // есть несохранённые правки админа
+  let saving = false;  // идёт публикация в Firebase
 
   function load() {
     try {
@@ -87,21 +89,33 @@
     } catch (e) { return null; }
   }
   let saveTimer = null;
+  // Локальное сохранение (резервная копия). В общую базу изменения НЕ уходят
+  // автоматически — только по кнопке «💾 Сохранить» (publish()).
   function save() {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => {
-      // Всегда дублируем локально как резервную копию
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
-      if (!isAdmin) return;
-      if (fbRef) {
-        fbRef.set(state)
-          .then(() => flashSaved())
-          .catch(() => { savedHint.textContent = "⚠ Ошибка сохранения Firebase"; });
-      } else {
-        // Firebase не настроен — локальный режим
-        flashSaved();
-      }
     }, 400);
+    if (isAdmin) { dirty = true; renderSaveBtn(); }
+  }
+
+  // Публикация текущего состояния в Firebase — вызывается кнопкой «Сохранить»
+  function publish() {
+    if (!isAdmin || !dirty || saving) return;
+    if (!fbRef) { dirty = false; renderSaveBtn(); flashSaved(); return; } // локальный режим
+    saving = true; renderSaveBtn();
+    fbRef.set(state)
+      .then(() => { saving = false; dirty = false; renderSaveBtn(); flashSaved(); })
+      .catch(() => { saving = false; renderSaveBtn(); savedHint.textContent = "⚠ Ошибка сохранения Firebase"; });
+  }
+
+  // Внешний вид кнопки «Сохранить» по текущему состоянию
+  function renderSaveBtn() {
+    if (!btnSave) return;
+    btnSave.classList.remove("clean", "dirty", "saving");
+    if (saving)     { btnSave.textContent = "⏳ Сохранение…"; btnSave.classList.add("saving"); }
+    else if (dirty) { btnSave.textContent = "💾 Сохранить";  btnSave.classList.add("dirty"); }
+    else            { btnSave.textContent = "✓ Сохранено";   btnSave.classList.add("clean"); }
   }
   function flashSaved() {
     savedHint.textContent = "✓ Сохранено";
@@ -114,6 +128,7 @@
   const stage = $("#stage");
   const tiersEl = $("#tiers");
   const savedHint = $("#savedHint");
+  const btnSave = $("#btnSave");
   const editToggle = $("#editToggle");
   const autoSortToggle = $("#autoSortToggle");
   const creditsEl = $("#credits");
@@ -741,6 +756,11 @@
     addItem(state.tiers[0].id);
   });
   $("#btnSort").addEventListener("click", sortAllTiers);
+  if (btnSave) btnSave.addEventListener("click", publish);
+  // Предупреждать о несохранённых изменениях при закрытии / перезагрузке
+  window.addEventListener("beforeunload", e => {
+    if (isAdmin && dirty) { e.preventDefault(); e.returnValue = ""; }
+  });
   $("#btnReset").addEventListener("click", () => {
     if (confirm("Сбросить тирлист к стандартному шаблону? Текущие данные будут потеряны.")) {
       state = defaultState();
@@ -850,6 +870,7 @@
     const tbEdit    = $("#tbEdit");
     const tbToggles = $("#tbToggles");
     const tbActions = $("#tbAdminActions");
+    const tbPublish = $("#tbPublish");
 
     if (admin) {
       if (loginBtn)  loginBtn.hidden  = true;
@@ -857,6 +878,8 @@
       if (tbEdit)    tbEdit.hidden    = false;
       if (tbToggles) tbToggles.hidden = false;
       if (tbActions) tbActions.hidden = false;
+      if (tbPublish) tbPublish.hidden = false;
+      renderSaveBtn();
       // Если в Firebase ещё нет данных — публикуем текущее состояние
       if (fbRef) fbRef.once("value", snap => { if (!snap.val()) fbRef.set(state); });
     } else {
@@ -865,6 +888,7 @@
       if (tbEdit)    tbEdit.hidden    = true;
       if (tbToggles) tbToggles.hidden = true;
       if (tbActions) tbActions.hidden = true;
+      if (tbPublish) tbPublish.hidden = true;
       editToggle.checked = false;
       applyEditMode();
     }
@@ -891,6 +915,7 @@
       fbRef.on("value", snapshot => {
         const data = snapshot.val();
         if (!data) return;
+        if (dirty) return; // у админа есть неопубликованные правки — не затираем их
         const d = defaultState();
         const merged = Object.assign({}, d, data);
         merged.ad      = Object.assign({}, d.ad,      data.ad      || {});
