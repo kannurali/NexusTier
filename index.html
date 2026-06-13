@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nexus Tier List — Редактор</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <!-- ================= Toolbar ================= -->
+  <div class="toolbar" id="toolbar">
+    <div class="tb-brand">NEXUS<span>EDITOR</span></div>
+
+    <!-- Кнопки редактирования — только для админа -->
+    <div class="tb-group" id="tbEdit" hidden>
+      <button class="btn" id="btnAddTier" title="Добавить новый тир">＋ Тир</button>
+      <button class="btn" id="btnAddItem" title="Добавить предмет в первый тир">＋ Предмет</button>
+      <button class="btn" id="btnSort" title="Отсортировать все предметы по цене (по убыванию)">⇅ Сортировать</button>
+    </div>
+
+    <div class="tb-group filters" id="filters">
+      <span class="tb-label">Показать:</span>
+      <button class="chip" data-f="fruits" title="Обычные фрукты, мутации, хроматики">Фрукты</button>
+      <button class="chip" data-f="perms" title="Перманентные фрукты">Пермы</button>
+      <button class="chip" data-f="passes" title="Геймпассы">Пассы</button>
+      <button class="chip" data-f="skins" title="Скины">Скины</button>
+      <button class="chip all" data-f="all" title="Показать всё">Все</button>
+    </div>
+
+    <!-- Переключатели — только для админа -->
+    <div class="tb-group" id="tbToggles" hidden>
+      <label class="switch" title="Автоматически переставлять предмет по цене при её изменении">
+        <input type="checkbox" id="autoSortToggle" checked />
+        <span class="track"><span class="thumb"></span></span>
+        <span class="switch-label">Автосорт</span>
+      </label>
+      <label class="switch" id="editToggleWrap" title="Режим редактирования">
+        <input type="checkbox" id="editToggle" />
+        <span class="track"><span class="thumb"></span></span>
+        <span class="switch-label">Редактирование</span>
+      </label>
+    </div>
+
+    <!-- PNG доступен всем; остальное — только админу -->
+    <div class="tb-group">
+      <button class="btn primary" id="btnPng" title="Скачать тирлист как PNG">⬇ Скачать PNG</button>
+    </div>
+    <div class="tb-group" id="tbAdminActions" hidden>
+      <button class="btn" id="btnExport" title="Сохранить как JSON">Экспорт</button>
+      <button class="btn" id="btnImport" title="Загрузить JSON">Импорт</button>
+      <button class="btn danger" id="btnReset" title="Сбросить к шаблону">Сброс</button>
+    </div>
+
+    <!-- Авторизация -->
+    <div class="tb-group">
+      <button class="btn" id="btnLogin" title="Войти как администратор">🔑 Войти</button>
+      <div class="tb-admin-badge" id="adminBadge" hidden>
+        <span class="tb-admin-text">👑 Админ</span>
+        <button class="btn small ghost" id="btnLogout">Выйти</button>
+      </div>
+    </div>
+
+    <input type="file" id="importFile" accept="application/json" hidden />
+    <input type="file" id="tierLogoFile" accept="image/*" hidden />
+    <input type="file" id="adImgFile" accept="image/*" hidden />
+    <span class="tb-saved" id="savedHint"></span>
+  </div>
+
+  <!-- ================= Stage (exported area) ================= -->
+  <div class="stage-wrap">
+    <div class="stage" id="stage">
+      <div class="petals" aria-hidden="true"></div>
+
+      <!-- Header -->
+      <header class="tl-header">
+        <img class="bf-logo" src="assets/bf-logo-trim.png" alt="Blox Fruits" />
+        <div class="title-block">
+          <div class="date" id="tlDate" spellcheck="false" title="Кликните, чтобы изменить дату">17.02.2026</div>
+          <h1 class="tl-title" id="tlTitle">NEXUS<br/>TIER LIST</h1>
+        </div>
+        <img class="brand-logo" src="assets/brand-logos.png" alt="Логотип" />
+      </header>
+
+      <!-- Tiers + ad block injected here -->
+      <main class="tiers" id="tiers"></main>
+
+      <!-- Legend -->
+      <section class="legend">
+        <h2 class="legend-title">ПОМОЩЬ ДЛЯ НОВЕНЬКИХ</h2>
+        <div class="legend-grid">
+          <div class="legend-col">
+            <div class="lg"><img class="tbadge" src="assets/badge-f.png" alt="F" />Обычный фрукт</div>
+            <div class="lg"><img class="tbadge" src="assets/badge-s.png" alt="S" />Скин</div>
+            <div class="lg"><img class="tbadge" src="assets/badge-m.png" alt="M" />Мутация</div>
+          </div>
+          <div class="legend-col">
+            <div class="lg"><img class="tbadge" src="assets/badge-p.png" alt="P" />Перманент</div>
+            <div class="lg"><img class="tbadge" src="assets/badge-gp.png" alt="GP" />Пасс</div>
+            <div class="lg"><img class="tbadge" src="assets/badge-cr.png" alt="CR" />Хроматик</div>
+          </div>
+          <div class="legend-col">
+            <div class="lg"><img class="dot" src="assets/dot-green.png" alt="" />Хорошо</div>
+            <div class="lg"><img class="dot" src="assets/dot-yellow.png" alt="" />Средне</div>
+          </div>
+          <div class="legend-col">
+            <div class="lg"><img class="dot" src="assets/dot-orange.png" alt="" />Ниже среднего</div>
+            <div class="lg"><img class="dot" src="assets/dot-red.png" alt="" />Плохо</div>
+          </div>
+          <div class="legend-col">
+            <div class="lg"><img class="trend" src="assets/trend-up.png" alt="" />Рост</div>
+            <div class="lg"><img class="trend tr-swap" src="assets/trend-swap.png" alt="" />Пересмотр</div>
+            <div class="lg"><img class="trend" src="assets/trend-down.png" alt="" />Упадок</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="tl-footer" id="tlFooter">
+        <a class="flink" href="https://discord.gg/A4ZG8sxCM" target="_blank" rel="noopener">
+          <span class="fl-title">МОЙ ДИСКОРД</span><span class="fl-sub">discord.gg/A4ZG8sxCM</span></a>
+        <a class="flink" href="https://t.me/mksvtnc" target="_blank" rel="noopener">
+          <span class="fl-title">МОЙ ТЕЛЕГРАММ</span><span class="fl-sub">t.me/mksvtnc</span></a>
+        <a class="flink" href="https://t.me/bfsnews" target="_blank" rel="noopener">
+          <span class="fl-title">BLOX FRUITS NEWS</span><span class="fl-sub">t.me/bfsnews</span></a>
+        <a class="flink" href="https://t.me/mksvtnc" target="_blank" rel="noopener">
+          <span class="fl-title">ВСЕ РОЗЫГРЫШИ ТУТ</span><span class="fl-sub">t.me/mksvtnc</span></a>
+        <a class="flink" href="https://discord.gg/Q9PO6UG9Q4" target="_blank" rel="noopener">
+          <span class="fl-title">CHARLOTTE TM</span><span class="fl-sub">discord.gg/Q9PO6UG9Q4</span></a>
+        <a class="flink" href="https://t.me/typeopozitivegg" target="_blank" rel="noopener">
+          <span class="fl-title">ПОМОЩНИК</span><span class="fl-sub">t.me/typeopozitivegg</span></a>
+      </footer>
+
+      <!-- Credits / team -->
+      <section class="credits" id="credits"></section>
+    </div>
+  </div>
+
+  <!-- ================= Item editor modal ================= -->
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modalTitle">Предмет</h3>
+        <button class="icon-btn" id="modalClose" title="Закрыть">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field icon-field">
+          <div class="icon-preview"><img id="mIconPreview" alt="" /></div>
+          <div class="icon-actions">
+            <label class="btn small">Загрузить иконку<input type="file" id="mIconFile" accept="image/*" hidden /></label>
+            <button class="btn small ghost" id="mIconReset">Стандартная</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Название</label>
+          <input type="text" id="mName" placeholder="Напр. Dragon" />
+        </div>
+        <div class="field">
+          <label>Значение</label>
+          <input type="text" id="mValue" inputmode="numeric" placeholder="Напр. 60000" />
+        </div>
+        <div class="field">
+          <label>Тип фрукта</label>
+          <div class="seg seg-toggle" id="mFruit">
+            <button data-v="f" class="active">Обычный <small>F</small></button>
+            <button data-v="p">Перманент <small>P</small></button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Категория (необязательно)</label>
+          <div class="seg" id="mType2">
+            <button data-v="" class="active">—</button>
+            <button data-v="s" class="t-s">S · Скин</button>
+            <button data-v="m" class="t-m">M · Мутация</button>
+            <button data-v="gp" class="t-gp">GP · Пасс</button>
+            <button data-v="cr" class="t-cr">CR · Хроматик</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Спрос</label>
+          <div class="seg" id="mDemand">
+            <button data-v="" class="active">—</button>
+            <button data-v="green"><img class="dot" src="assets/dot-green.png" alt="" /></button>
+            <button data-v="yellow"><img class="dot" src="assets/dot-yellow.png" alt="" /></button>
+            <button data-v="orange"><img class="dot" src="assets/dot-orange.png" alt="" /></button>
+            <button data-v="red"><img class="dot" src="assets/dot-red.png" alt="" /></button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Тренд</label>
+          <div class="seg" id="mTrend">
+            <button data-v="" class="active">—</button>
+            <button data-v="up"><img class="trend" src="assets/trend-up.png" alt="" /></button>
+            <button data-v="swap"><img class="trend tr-swap" src="assets/trend-swap.png" alt="" /></button>
+            <button data-v="down"><img class="trend" src="assets/trend-down.png" alt="" /></button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn danger" id="mDelete">Удалить</button>
+        <button class="btn primary" id="mSave">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/html2canvas.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
