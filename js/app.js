@@ -21,7 +21,7 @@
       date: "17.02.2026",
       autoSort: true,
       filters: { fruits: true, mutations: true, perms: true, passes: true, skins: true },
-      ad: { text: "МЕСТО ДЛЯ ВАШЕЙ РЕКЛАМЫ — t.me/mksvtnc", image: "" },
+      ad: { text: "МЕСТО ДЛЯ ВАШЕЙ РЕКЛАМЫ — t.me/mksvtnc", image: "", link: "" },
       credits: [
         { role: "Автор", name: "Maknemy" },
         { role: "Дизайнер", name: "Maknemy" },
@@ -438,6 +438,25 @@
   function renderAd() {
     const ad = document.createElement("section");
     ad.className = "ad-block";
+    const hasLink = !!(state.ad.link && state.ad.link.trim());
+    if (hasLink) ad.classList.add("has-link");
+
+    // Скрытая ссылка: клик по картинке/тексту/значку открывает URL (в обычном
+    // режиме). Сам URL в тексте не показываем — его пишет админ как захочет.
+    const openLink = (e) => {
+      if (!hasLink || stage.classList.contains("editing")) return;
+      if (e) e.preventDefault();
+      window.open(state.ad.link, "_blank", "noopener");
+    };
+    // значок-индикатор «это ссылка» (🔗) — на картинке, либо в углу блока
+    const makeBadge = () => {
+      const b = document.createElement("span");
+      b.className = "ad-link-badge";
+      b.textContent = "🔗";
+      b.title = "Это ссылка — нажмите по рекламе, чтобы открыть";
+      b.addEventListener("click", openLink);
+      return b;
+    };
 
     const chip = document.createElement("span");
     chip.className = "ad-chip";
@@ -445,11 +464,16 @@
     ad.appendChild(chip);
 
     if (state.ad.image) {
+      const wrap = document.createElement("div");
+      wrap.className = "ad-img-wrap";
       const img = document.createElement("img");
       img.className = "ad-img";
       img.src = state.ad.image;
       img.alt = "Реклама";
-      ad.appendChild(img);
+      img.addEventListener("click", openLink);
+      wrap.appendChild(img);
+      if (hasLink) wrap.appendChild(makeBadge()); // 🔗 поверх картинки
+      ad.appendChild(wrap);
     }
 
     const txt = document.createElement("div");
@@ -458,12 +482,22 @@
     txt.spellcheck = false;
     txt.addEventListener("blur", () => { state.ad.text = txt.textContent.trim(); save(); });
     txt.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); txt.blur(); } });
+    txt.addEventListener("click", openLink);
     ad.appendChild(txt);
+
+    // если картинки нет — значок-ссылку ставим в угол блока
+    if (hasLink && !state.ad.image) ad.appendChild(makeBadge());
 
     const tools = document.createElement("div");
     tools.className = "ad-tools edit-only";
     tools.appendChild(toolBtn("🖼 Баннер", "Загрузить картинку рекламы", () => $("#adImgFile").click()));
     if (state.ad.image) tools.appendChild(toolBtn("Т Текст", "Убрать картинку", () => { state.ad.image = ""; save(); render(); }));
+    tools.appendChild(toolBtn(hasLink ? "🔗 Ссылка ✓" : "🔗 Ссылка",
+      "Скрытая ссылка: клик по рекламе откроет её, URL в тексте не виден. Пусто — убрать.",
+      () => {
+        const v = prompt("Скрытая ссылка (URL) для рекламы. Оставьте пустым, чтобы убрать:", state.ad.link || "");
+        if (v !== null) { state.ad.link = v.trim(); save(); render(); }
+      }));
     ad.appendChild(tools);
     return ad;
   }
