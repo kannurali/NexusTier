@@ -743,9 +743,55 @@ html, body {
 /* ===================== View (non-edit) mode ===================== */
 .stage:not(.editing) .cell { cursor: default; }
 
-/* ===================== Responsive toolbar ===================== */
+/* ===================== Responsive (телефоны) ===================== */
 @media (max-width: 640px) {
-  .tb-brand { width: 100%; padding-right: 96px; } /* не залезать под плавающую кнопку */
+  html, body { overflow-x: hidden; }
+
+  /* --- панель: ничего не обрезается, чипы переносятся --- */
+  .toolbar { gap: 10px 10px; padding: 10px 12px; }
+  .tb-brand { width: 100%; padding-right: 92px; font-size: 20px; } /* место под «Войти» */
   .tb-saved { display: none; }
-  .toolbar { padding-right: 16px; }
+  .tb-group.filters { flex-wrap: wrap; width: 100%; gap: 6px; }
+  .filters .tb-label { width: 100%; margin-bottom: 2px; }
+  .chip { padding: 7px 12px; }                 /* чуть крупнее под палец */
+  .btn { padding: 9px 12px; }
+
+  /* --- тирлист во всю ширину экрана (крупнее) --- */
+  .stage-wrap { padding: 10px 0 34px; }
+  .stage { width: 100vw; border-radius: 0; padding: 3cqw 2.6cqw 2cqw; }
+
+  /* --- крупнее предметы и текст: меньше штук в ряд, но читаемо ---
+     (itemsPerRow меряет ячейку зондом, поэтому разбивка на ряды подстроится) */
+  .cell { width: 14cqw; }
+  .cell-icon { height: 10.5cqw; }
+  .cell-strip { height: 4cqw; margin-top: .3cqw; }
+  .cell-value { font-size: 3.3cqw; }
+  .cell .dot   { top: 7.5cqw; }
+  .cell .trend { top: 7.6cqw; }
+  .cell-add { width: 14cqw; height: 15cqw; font-size: 6cqw; }
+
+  /* иконки-бейджи/точки/тренды крупнее (в ячейках и в легенде) */
+  .tbadge { height: 3.3cqw; }
+  .dot { width: 2.5cqw; height: 2.5cqw; }
+  .trend { width: 2.5cqw; }
+  .trend.tr-swap { width: 3.7cqw; }
+
+  /* плашки тиров */
+  .tier-band { height: 7.2cqw; border-radius: 3.6cqw; }
+  .band-logo { height: 5cqw; }
+  .tier-label { font-size: 4cqw; }
+  .tier-items { min-height: 14cqw; border-radius: 2cqw; }
+
+  /* шапка */
+  .date { font-size: 3.4cqw; }
+
+  /* легенда / подвал / титры — крупнее, чтобы читались */
+  .legend-title { font-size: 3.6cqw; }
+  .lg { font-size: 2.7cqw; gap: 1cqw; }
+  .fl-title { font-size: 2.7cqw; }
+  .fl-sub { font-size: 2.3cqw; }
+  .cr-role { font-size: 2.3cqw; }
+  .cr-name { font-size: 2.5cqw; }
+  .ad-text { font-size: 3.6cqw; }
+  .ad-chip { font-size: 2cqw; }
 }

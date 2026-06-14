@@ -253,16 +253,31 @@
   }
 
   // Сколько ячеек помещается в один ряд при текущей ширине сцены.
-  // cqw = 1% inline-размера .stage (container-type: inline-size).
+  // Ширину ячейки и gap МЕРЯЕМ зондом, а не берём 8.2cqw жёстко — чтобы
+  // разбивка на ряды учитывала медиазапросы (на телефоне ячейки крупнее).
   function itemsPerRow() {
     const cs = getComputedStyle(stage);
     const contentW = stage.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
     if (!contentW || contentW < 60) return 0; // сцена ещё не разложена
     const cqw = contentW / 100;
-    const cellW   = 8.2 * cqw;
-    const colGap  = 0.55 * cqw;
-    const panelPad = 0.8 * cqw;            // .tier-items padding слева+справа
-    const innerW  = contentW - 2 * panelPad - 2; // -2 на рамку панели
+    let cellW = 8.2 * cqw, colGap = 0.55 * cqw, panelPad = 0.8 * cqw;
+    // зонд: настоящая .tier-items с одной .cell внутри
+    const pList = document.createElement("div");
+    pList.className = "tier-items";
+    pList.style.cssText = "position:absolute;visibility:hidden;width:auto;min-height:0;";
+    const pCell = document.createElement("div");
+    pCell.className = "cell";
+    pList.appendChild(pCell);
+    tiersEl.appendChild(pList);
+    const lcs = getComputedStyle(pList);
+    const cw = pCell.getBoundingClientRect().width;
+    const g  = parseFloat(lcs.columnGap);
+    const pad = parseFloat(lcs.paddingLeft) + parseFloat(lcs.paddingRight);
+    tiersEl.removeChild(pList);
+    if (cw > 0) cellW = cw;
+    if (!isNaN(g)) colGap = g;
+    if (!isNaN(pad)) panelPad = pad / 2;
+    const innerW = contentW - 2 * panelPad - 2; // -2 на рамку панели
     const per = Math.floor((innerW + colGap) / (cellW + colGap) + 1e-6);
     return Math.max(1, per);
   }
