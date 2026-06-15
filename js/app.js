@@ -20,7 +20,7 @@
       title: "NEXUS\nTIER LIST",
       date: "17.02.2026",
       autoSort: true,
-      filters: { fruits: true, mutations: true, perms: true, passes: true, skins: true },
+      filters: { fruits: true, mutations: true, perms: false, passes: true, skins: true },
       ad: { text: "МЕСТО ДЛЯ ВАШЕЙ РЕКЛАМЫ — t.me/mksvtnc", image: "", link: "" },
       credits: [
         { role: "Автор", name: "Maknemy" },
@@ -92,6 +92,7 @@
       const merged = Object.assign({}, d, data);
       merged.ad = Object.assign({}, d.ad, data.ad || {});
       merged.filters = Object.assign({}, d.filters, data.filters || {});
+      merged.filters.perms = false; // пермы по умолчанию скрыты — показываются только по клику
       if (!Array.isArray(merged.credits) || !merged.credits.length) merged.credits = d.credits;
       if (!Array.isArray(merged.footer) || !merged.footer.length) merged.footer = d.footer;
       if (typeof merged.autoSort !== "boolean") merged.autoSort = true;
@@ -294,24 +295,46 @@
     return tier.items.filter(it => state.filters[groupOf(it.type)]);
   }
 
+  // Целевое число предметов в блоке (тире) при ПРОСМОТРЕ: видимые предметы
+  // переливаются в блоки по столько штук, заполняя верхние блоки ближайшими
+  // предметами снизу — чтобы не было пустых мест.
+  const ITEMS_PER_BLOCK = 11;
+
   function render() {
     tiersEl.innerHTML = "";
     const editing = editToggle.checked;
-    // С учётом фильтров показываем только тиры, где остался хотя бы один
-    // предмет; предметы внутри переупаковываются без «дырок». Полностью
-    // пустой тир (0 предметов) показываем лишь в режиме редактирования —
-    // чтобы его можно было наполнить.
-    const vis = [];
-    state.tiers.forEach((tier, ti) => {
-      const items = visibleItemsOf(tier);
-      if (items.length || (editing && !tier.items.length)) vis.push({ tier, ti, items });
-    });
-    const adAfter = Math.ceil(vis.length / 2) - 1; // середина видимого тирлиста
-    vis.forEach((v, idx) => {
-      tiersEl.appendChild(renderTier(v.tier, v.ti, v.items));
+
+    // blocks: [{ tier, ti, items }] — что и под какой плашкой рисуем
+    let blocks;
+    if (editing) {
+      // Редактирование: реальная структура — каждый тир со своими предметами
+      // (с учётом фильтров). Полностью пустой тир оставляем видимым, чтобы его
+      // можно было наполнить. Предметы между тирами НЕ перемещаем.
+      blocks = [];
+      state.tiers.forEach((tier, ti) => {
+        const items = visibleItemsOf(tier);
+        if (items.length || !tier.items.length) blocks.push({ tier, ti, items });
+      });
+    } else {
+      // Просмотр: переливаем ВСЕ видимые предметы в блоки по ITEMS_PER_BLOCK,
+      // заполняя верхние блоки ближайшими предметами снизу — без пустых мест.
+      // Плашки, на которые не хватило предметов, не показываем.
+      const flat = [];
+      state.tiers.forEach(tier => { for (const it of visibleItemsOf(tier)) flat.push(it); });
+      blocks = [];
+      for (let i = 0; i < flat.length; i += ITEMS_PER_BLOCK) {
+        const bi = blocks.length;
+        const tier = state.tiers[Math.min(bi, state.tiers.length - 1)];
+        blocks.push({ tier, ti: bi, items: flat.slice(i, i + ITEMS_PER_BLOCK) });
+      }
+    }
+
+    const adAfter = Math.ceil(blocks.length / 2) - 1; // середина списка
+    blocks.forEach((b, idx) => {
+      tiersEl.appendChild(renderTier(b.tier, b.ti, b.items));
       if (idx === adAfter) tiersEl.appendChild(renderAd());
     });
-    if (!vis.length) tiersEl.appendChild(renderAd());
+    if (!blocks.length) tiersEl.appendChild(renderAd());
     renderFooter();
     renderCredits();
     applyFilters();
@@ -1175,6 +1198,7 @@
     const merged = Object.assign({}, d, data);
     merged.ad      = Object.assign({}, d.ad,      data.ad      || {});
     merged.filters = Object.assign({}, d.filters, data.filters || {});
+    merged.filters.perms = false; // пермы по умолчанию скрыты — показываются только по клику
     if (!Array.isArray(merged.credits) || !merged.credits.length) merged.credits = d.credits;
     if (!Array.isArray(merged.footer)  || !merged.footer.length)  merged.footer  = d.footer;
     merged.tiers.forEach(t => { if (!t.logo && TIER_LOGOS[t.label]) t.logo = TIER_LOGOS[t.label]; });
