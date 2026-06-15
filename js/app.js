@@ -75,6 +75,11 @@
   let fbRef = null;
   let dirty = false;   // есть несохранённые правки админа
   let saving = false;  // идёт публикация в Firebase
+  // Восстановление после перезагрузки: не затирать локальные правки данными из базы
+  let bootedFromLocal = localStorage.getItem(STORAGE_KEY) != null;
+  let deferredServer = null;       // снимок из базы, отложенный до выяснения роли входа
+  let roleResolved = false;        // onAuthStateChanged уже отработал
+  let firstSnapshotHandled = false;
 
   function load() {
     try {
@@ -108,14 +113,84 @@
     if (isAdmin) { dirty = true; renderSaveBtn(); }
   }
 
+  // ---------- Сжатие картинок ----------
+  // Firebase Realtime Database хранит JSON, а не файлы. Раньше загруженные
+  // картинки клались в состояние как полный base64 (data URL) в несколько МБ —
+  // из-за этого один общий set(state) мог грузиться минутами или висеть.
+  // Поэтому любую картинку уменьшаем и пережимаем в WebP (обычно единицы КБ).
+  function shrinkDataURL(src, maxSize, quality) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth || img.width;
+        let h = img.naturalHeight || img.height;
+        const scale = Math.min(1, maxSize / Math.max(w, h || 1));
+        w = Math.max(1, Math.round(w * scale));
+        h = Math.max(1, Math.round(h * scale));
+        const c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        c.getContext("2d").drawImage(img, 0, 0, w, h);
+        let out = "";
+        try { out = c.toDataURL("image/webp", quality); } catch (e) {}
+        // WebP не поддержан (старый Safari) → toDataURL вернёт PNG
+        if (out.indexOf("data:image/webp") !== 0) {
+          try { out = c.toDataURL("image/png"); } catch (e) { out = ""; }
+        }
+        // если меньше не стало (картинка и так крошечная) — оставляем исходник
+        resolve(out && out.length < src.length ? out : src);
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    });
+  }
+  // File → сжатый data URL
+  function fileToSmallDataURL(file, maxSize, quality) {
+    return new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => shrinkDataURL(reader.result, maxSize, quality).then(resolve);
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    });
+  }
+  const isBigDataURL = s =>
+    typeof s === "string" && s.indexOf("data:") === 0 && s.length > 40000; // ~30 КБ+
+
+  // Пережать крупные картинки, уже лежащие в состоянии (старые загрузки в
+  // полном размере), чтобы публикация в Firebase не висела.
+  async function compactState() {
+    for (const t of state.tiers) {
+      if (isBigDataURL(t.logo)) t.logo = await shrinkDataURL(t.logo, 160, 0.85);
+      for (const it of t.items) {
+        if (isBigDataURL(it.icon)) it.icon = await shrinkDataURL(it.icon, 160, 0.85);
+      }
+    }
+    if (state.ad && isBigDataURL(state.ad.image)) {
+      state.ad.image = await shrinkDataURL(state.ad.image, 720, 0.85);
+    }
+  }
+
   // Публикация текущего состояния в Firebase — вызывается кнопкой «Сохранить»
-  function publish() {
+  async function publish() {
     if (!isAdmin || !dirty || saving) return;
     if (!fbRef) { dirty = false; renderSaveBtn(); flashSaved(); return; } // локальный режим
     saving = true; renderSaveBtn();
-    fbRef.set(state)
-      .then(() => { saving = false; dirty = false; renderSaveBtn(); flashSaved(); })
-      .catch(() => { saving = false; renderSaveBtn(); savedHint.textContent = "⚠ Ошибка сохранения Firebase"; });
+    try {
+      await compactState();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+      render();
+      let to;
+      await Promise.race([
+        fbRef.set(state),
+        new Promise((_, rej) => { to = setTimeout(() => rej(new Error("timeout")), 30000); }),
+      ]);
+      clearTimeout(to);
+      saving = false; dirty = false; renderSaveBtn(); flashSaved();
+    } catch (err) {
+      saving = false; renderSaveBtn();
+      savedHint.textContent = (err && err.message === "timeout")
+        ? "⚠ Долго нет ответа — проверьте интернет и размер картинок"
+        : "⚠ Ошибка сохранения Firebase";
+    }
   }
 
   // Внешний вид кнопки «Сохранить» по текущему состоянию
@@ -730,13 +805,12 @@
   $("#tierLogoFile").addEventListener("change", e => {
     const file = e.target.files[0];
     if (!file || !tierLogoTarget) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const t = findTier(tierLogoTarget);
-      if (t) { t.logo = reader.result; save(); render(); }
-      tierLogoTarget = null;
-    };
-    reader.readAsDataURL(file);
+    const tid = tierLogoTarget;
+    tierLogoTarget = null;
+    fileToSmallDataURL(file, 160, 0.85).then(url => {
+      const t = findTier(tid);
+      if (t && url) { t.logo = url; save(); render(); }
+    });
     e.target.value = "";
   });
 
@@ -744,9 +818,9 @@
   $("#adImgFile").addEventListener("change", e => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { state.ad.image = reader.result; save(); render(); };
-    reader.readAsDataURL(file);
+    fileToSmallDataURL(file, 720, 0.85).then(url => {
+      if (url) { state.ad.image = url; save(); render(); }
+    });
     e.target.value = "";
   });
 
@@ -869,9 +943,9 @@
   $("#mIconFile").addEventListener("change", e => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => { $("#mIconPreview").src = reader.result; };
-    reader.readAsDataURL(file);
+    fileToSmallDataURL(file, 160, 0.85).then(url => {
+      if (url) $("#mIconPreview").src = url;
+    });
     e.target.value = "";
   });
   $("#mIconReset").addEventListener("click", () => { $("#mIconPreview").src = DEFAULT_ICON; });
@@ -1075,6 +1149,41 @@
       editToggle.checked = false;
       applyEditMode();
     }
+    roleResolved = true;
+    resolvePending();
+  }
+
+  // ---------- Слияние и применение данных из Firebase ----------
+  function mergeServer(data) {
+    const d = defaultState();
+    const merged = Object.assign({}, d, data);
+    merged.ad      = Object.assign({}, d.ad,      data.ad      || {});
+    merged.filters = Object.assign({}, d.filters, data.filters || {});
+    if (!Array.isArray(merged.credits) || !merged.credits.length) merged.credits = d.credits;
+    if (!Array.isArray(merged.footer)  || !merged.footer.length)  merged.footer  = d.footer;
+    merged.tiers.forEach(t => { if (!t.logo && TIER_LOGOS[t.label]) t.logo = TIER_LOGOS[t.label]; });
+    return merged;
+  }
+  function applyServer(s) {
+    state = s;
+    dateEl.textContent     = state.date;
+    autoSortToggle.checked = state.autoSort;
+    render();
+  }
+  function sameState(a, b) {
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
+  }
+  // Когда роль входа выяснена, решаем судьбу отложенного снимка из базы:
+  // админ сохраняет свои несохранённые правки, обычный зритель видит базу.
+  function resolvePending() {
+    if (deferredServer === null) return;
+    const srv = deferredServer; deferredServer = null;
+    if (isAdmin) {
+      dirty = true; renderSaveBtn();
+      savedHint.textContent = "♻ Восстановлены несохранённые правки — нажмите «Сохранить»";
+    } else {
+      applyServer(srv);
+    }
   }
 
   function initFirebase() {
@@ -1099,19 +1208,24 @@
         const data = snapshot.val();
         if (!data) return;
         if (dirty) return; // у админа есть неопубликованные правки — не затираем их
-        const d = defaultState();
-        const merged = Object.assign({}, d, data);
-        merged.ad      = Object.assign({}, d.ad,      data.ad      || {});
-        merged.filters = Object.assign({}, d.filters, data.filters || {});
-        if (!Array.isArray(merged.credits) || !merged.credits.length) merged.credits = d.credits;
-        if (!Array.isArray(merged.footer) || !merged.footer.length) merged.footer = d.footer;
-        merged.tiers.forEach(t => {
-          if (!t.logo && TIER_LOGOS[t.label]) t.logo = TIER_LOGOS[t.label];
-        });
-        state = merged;
-        dateEl.textContent        = state.date;
-        autoSortToggle.checked    = state.autoSort;
-        render();
+        const merged = mergeServer(data);
+
+        // Первый снимок после перезагрузки: если в localStorage остались
+        // правки, которых ещё нет в общей базе (например, прошлое сохранение
+        // оборвалось), не теряем их. Что делать — зависит от роли (админ
+        // оставляет правки, зритель видит базу), а вход подтверждается
+        // асинхронно, поэтому откладываем решение до выяснения роли.
+        if (!firstSnapshotHandled) {
+          firstSnapshotHandled = true;
+          if (bootedFromLocal && !sameState(merged, state)) {
+            deferredServer = merged;
+            if (roleResolved) resolvePending();
+            return;
+          }
+        }
+        if (deferredServer !== null) { deferredServer = merged; return; }
+
+        applyServer(merged);
       });
 
       // Сообщение «вход только для администратора» прямо на странице
