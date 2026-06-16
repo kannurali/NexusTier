@@ -73,6 +73,7 @@
   let state = load() || defaultState();
   let isAdmin = false;
   let fbRef = null;
+  let likesRef = null;             // отдельная ветка Firebase для глобальных лайков
   let dirty = false;   // есть несохранённые правки админа
   let saving = false;  // идёт публикация в Firebase
   // Восстановление после перезагрузки: не затирать локальные правки данными из базы
@@ -1160,6 +1161,66 @@
   });
 
   // ============================================================
+  //  LIKE BUTTON (глобальный счётчик лайков для всех посетителей)
+  // ============================================================
+  // Счётчик общий — лежит в Firebase по пути "likes". Любой посетитель может
+  // поставить лайк (без входа). Чтобы один браузер не накручивал, запоминаем
+  // факт лайка в localStorage и разрешаем переключение лайк/не-лайк (±1).
+  const LIKED_KEY = "nexus-liked";
+  let hasLiked = false;
+  let likeCount = 0;
+  try { hasLiked = localStorage.getItem(LIKED_KEY) === "1"; } catch (e) {}
+
+  const likeBtn = $("#likeBtn");
+  const likeCountEl = $("#likeCount");
+
+  function renderLike() {
+    if (!likeBtn) return;
+    likeBtn.classList.toggle("liked", hasLiked);
+    likeBtn.setAttribute("aria-pressed", hasLiked ? "true" : "false");
+    likeBtn.title = hasLiked ? "Убрать лайк" : "Поставить лайк";
+    const heart = likeBtn.querySelector(".like-heart");
+    if (heart) heart.textContent = hasLiked ? "💙" : "🤍";
+    if (likeCountEl) likeCountEl.textContent = likeCount.toLocaleString("ru-RU");
+  }
+
+  function setLiked(v) {
+    hasLiked = v;
+    try { localStorage.setItem(LIKED_KEY, v ? "1" : "0"); } catch (e) {}
+    renderLike();
+  }
+
+  // короткий «всплеск» сердечка при клике
+  function popLike() {
+    if (!likeBtn) return;
+    likeBtn.classList.remove("pop");
+    void likeBtn.offsetWidth; // перезапустить CSS-анимацию
+    likeBtn.classList.add("pop");
+  }
+
+  function toggleLike() {
+    const willLike = !hasLiked;
+    setLiked(willLike);
+    popLike();
+    if (likesRef) {
+      // атомарный инкремент/декремент — корректно при одновременных лайках
+      likesRef.transaction(cur => {
+        cur = (typeof cur === "number" && cur >= 0) ? cur : 0;
+        return Math.max(0, cur + (willLike ? 1 : -1));
+      }, (err, committed) => {
+        if (err || !committed) setLiked(!willLike); // запись не прошла — откат
+      });
+    } else {
+      // Firebase не настроен — лайк живёт только в этом браузере
+      likeCount = Math.max(0, likeCount + (willLike ? 1 : -1));
+      renderLike();
+    }
+  }
+
+  if (likeBtn) likeBtn.addEventListener("click", toggleLike);
+  renderLike();
+
+  // ============================================================
   //  FIREBASE — авторизация и синхронизация
   // ============================================================
   function setAdminMode(admin) {
@@ -1245,6 +1306,14 @@
       firebase.initializeApp(FIREBASE_CONFIG);
       const auth = firebase.auth();
       fbRef = firebase.database().ref("tierlist");
+
+      // Глобальные лайки — общий счётчик для всех посетителей (реальное время)
+      likesRef = firebase.database().ref("likes");
+      likesRef.on("value", snap => {
+        const v = snap.val();
+        likeCount = (typeof v === "number" && v >= 0) ? v : 0;
+        renderLike();
+      });
 
       // Слушаем обновления — все клиенты получают новые данные в реальном времени
       fbRef.on("value", snapshot => {
